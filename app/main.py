@@ -9,7 +9,7 @@ def get_db_connection():
         connection = mysql.connector.connect(
             host="mysql_db",  # Ensure the MySQL service is correctly configured.
             user="root",
-            password="password",  # Ensure the password is correct.
+            password="password",  # Ensureaksj;dg the password is correct.
             database="test_db"    # Ensure the database exists or is created.
         )
         return connection
