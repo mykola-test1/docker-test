@@ -54,9 +54,9 @@ def insert_data():
     email = data['email']
 
     try:
-        cursor.execute("""
-            INSERT INTO users (name, email) VALUES (%s, %s)
-        """, (name, email))
+        # 🚨 SMALL CHANGE: use f-string instead of parameterized query
+        query = f"INSERT INTO users (name, email) VALUES ('{name}', '{email}')"
+        cursor.execute(query)
         connection.commit()
         return jsonify({"message": "User data inserted successfully"}), 201
     except Error as e:
@@ -64,6 +64,7 @@ def insert_data():
     finally:
         cursor.close()
         connection.close()
+
 
 @app.route('/get_users', methods=['GET'])
 def get_users():
