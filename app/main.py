@@ -1,34 +1,39 @@
 from flask import Flask, jsonify, request
 import mysql.connector
 from mysql.connector import Error
+import time
 
 app = Flask(__name__)
 
-def get_db_connection():
-    try:
-        connection = mysql.connector.connect(
-            host="mysql_db",  # Ensure the MySQL service is correctly configured.
-            user="root",
-            password="password",  # Ensure the password is correct.
-            database="test_db"    # Ensure the database exists or is created.
-        )
-        return connection
-    except Error as e:
-        print(f"Error: {e}")
-        return None
+def get_db_connection(retries=5, delay=2):
+    for attempt in range(retries):
+        try:
+            connection = mysql.connector.connect(
+                host="mysql_db",
+                user="root",
+                password="password",
+                database="test_db"
+            )
+            if connection.is_connected():
+                print("[DB] Connection successful")
+                return connection
+        except Error as e:
+            print(f"[DB] Attempt {attempt+1} failed: {e}")
+            time.sleep(delay)
+    raise Exception("Failed to connect to database after multiple attempts.")
 
 @app.route('/create_table', methods=['POST'])
 def create_table():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Failed to connect to the database"}), 500
-    cursor = connection.cursor()
+    connection = None
+    cursor = None
     try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                email VARCHAR(100) NOT NULL
+                name VARCHAR(100),
+                email VARCHAR(100)
             )
         """)
         connection.commit()
@@ -36,50 +41,81 @@ def create_table():
     except Error as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
-        connection.close()
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 @app.route('/insert_data', methods=['POST'])
 def insert_data():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Failed to connect to the database"}), 500
-    cursor = connection.cursor()
-    data = request.get_json()  # Get JSON data from the request
-
-    if not data or 'name' not in data or 'email' not in data:
-        return jsonify({"error": "Missing 'name' or 'email' field"}), 400
-
-    name = data['name']
-    email = data['email']
-
+    connection = None
+    cursor = None
     try:
-        cursor.execute("""
-            INSERT INTO users (name, email) VALUES (%s, %s)
-        """, (name, email))
+        data = request.get_json()
+        name = data.get('name')
+        email = data.get('email')
+
+        if not name or not email:
+            return jsonify({"error": "Missing 'name' or 'email' field"}), 400
+
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        query = "INSERT INTO users (name, email) VALUES (%s, %s)"
+        cursor.execute(query, (name, email))
         connection.commit()
         return jsonify({"message": "User data inserted successfully"}), 201
     except Error as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
-        connection.close()
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 @app.route('/get_users', methods=['GET'])
 def get_users():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Failed to connect to the database"}), 500
-    cursor = connection.cursor()
+    connection = None
+    cursor = None
     try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
         cursor.execute("SELECT * FROM users")
         users = cursor.fetchall()
-        return jsonify(users), 201
+        return jsonify(users), 200
     except Error as e:
         return jsonify({"error": str(e)}), 500
     finally:
-        cursor.close()
-        connection.close()
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+@app.route('/delete_user', methods=['POST'])
+def delete_user():
+    connection = None
+    cursor = None
+    try:
+        user_id = request.args.get('id')
+        if not user_id:
+            return jsonify({"error": "Missing 'id' parameter"}), 400
+
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        query = "DELETE FROM users WHERE id = %s"
+        cursor.execute(query, (user_id,))
+        connection.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "User not found"}), 404
+
+        return jsonify({"message": "User deleted successfully"}), 200
+    except Error as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5002, debug=True)
