@@ -1,85 +1,86 @@
 from flask import Flask, jsonify, request
 import mysql.connector
-from mysql.connector import Error
+import json
 
 app = Flask(__name__)
 
 def get_db_connection():
-    try:
-        connection = mysql.connector.connect(
-            host="mysql_db",  # Ensure the MySQL service is correctly configured.
-            user="root",
-            password="password",  # Ensure the password is correct.
-            database="test_db"    # Ensure the database exists or is created.
-        )
-        return connection
-    except Error as e:
-        print(f"Error: {e}")
-        return None
+    connection = mysql.connector.connect(
+        host="mysql_db",
+        user="root",
+        password="password",
+        database="test_db"
+    )
+    return connection
 
 @app.route('/create_table', methods=['POST'])
 def create_table():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Failed to connect to the database"}), 500
-    cursor = connection.cursor()
     try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                email VARCHAR(100) NOT NULL
+                name VARCHAR(100),
+                email VARCHAR(100)
             )
         """)
         connection.commit()
-        return jsonify({"message": "Table 'users' created successfully"}), 201
-    except Error as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
         cursor.close()
         connection.close()
+        return jsonify({"message": "Table 'users' created successfully"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/insert_data', methods=['POST'])
 def insert_data():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Failed to connect to the database"}), 500
-    cursor = connection.cursor()
-    data = request.get_json()  # Get JSON data from the request
-
-    if not data or 'name' not in data or 'email' not in data:
-        return jsonify({"error": "Missing 'name' or 'email' field"}), 400
-
-    name = data['name']
-    email = data['email']
-
     try:
-        cursor.execute("""
-            INSERT INTO users (name, email) VALUES (%s, %s)
-        """, (name, email))
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        data = request.get_json()
+
+        name = data.get('name')
+        email = data.get('email')
+
+        if not name or not email:
+            return jsonify({"error": "Missing 'name' or 'email' field"}), 400
+
+        query = f"INSERT INTO users (name, email) VALUES ('{name}', '{email}')"
+        cursor.execute(query)
         connection.commit()
-        return jsonify({"message": "User data inserted successfully"}), 201
-    except Error as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
         cursor.close()
         connection.close()
+        return jsonify({"message": "User data inserted successfully"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/get_users', methods=['GET'])
 def get_users():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({"error": "Failed to connect to the database"}), 500
-    cursor = connection.cursor()
     try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
         cursor.execute("SELECT * FROM users")
         users = cursor.fetchall()
-        return jsonify(users), 201
-    except Error as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
         cursor.close()
         connection.close()
+
+        return jsonify(users), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/delete_user', methods=['POST'])
+def delete_user():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        user_id = request.args.get('id')
+        cursor.execute(f"DELETE FROM users WHERE id = {user_id}")
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return jsonify({"message": "User deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5002, debug=True)
