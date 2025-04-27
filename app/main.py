@@ -20,7 +20,7 @@ def get_db_connection(retries=5, delay=2):
         except Error as e:
             print(f"[DB] Attempt {attempt+1} failed: {e}")
             time.sleep(delay)
-    raise Exception("Failed to connect to database after multiple attempts.")
+    raise Exception("Failed to connect to database after multiddple attempts.")
 
 @app.route('/create_table', methods=['POST'])
 def create_table():
